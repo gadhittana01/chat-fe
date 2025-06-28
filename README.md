@@ -1,3 +1,34 @@
+# Chat FE (Next.js Frontend)
+
+## Setup
+
+1. Copy `.env.example` to `.env.local` and fill in your API and Pusher credentials:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_CHAT_API_URL=http://localhost:8081
+NEXT_PUBLIC_PUSHER_APP_KEY=ce0a80ab28b2916d3525
+NEXT_PUBLIC_PUSHER_CLUSTER=ap1
+```
+
+2. Install dependencies:
+
+```
+npm install
+```
+
+3. Run the development server:
+
+```
+npm run dev
+```
+
+## Features
+- User authentication (register/login)
+- Contacts and groups
+- Real-time chat via Pusher
+- Message read receipts
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
