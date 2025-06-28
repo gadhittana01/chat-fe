@@ -36,7 +36,9 @@ import {
   PersonAdd as PersonAddIcon,
   Check as CheckIcon,
   Clear as ClearIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  Menu as MenuIcon,
+  ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
 import { 
   MessageCircle, 
@@ -143,7 +145,12 @@ interface PusherChannel {
   name: string;
   unbind_all: () => void;
   bind: (event: string, callback: (data: PusherChannelData) => void) => void;
+  unbind: (event: string, callback: (data: PusherChannelData) => void) => void;
 }
+
+// Service URLs - defined outside component to prevent recreation on every render
+const USER_SERVICE_URL = process.env.NEXT_PUBLIC_USER_SERVICE_URL || 'https://chat.gadhittana.com/api/v1/user';
+const CHAT_SERVICE_URL = process.env.NEXT_PUBLIC_CHAT_SERVICE_URL || 'https://chat.gadhittana.com/api/v1/chat';
 
 // Create modern theme
 const theme = createTheme({
@@ -211,6 +218,276 @@ const theme = createTheme({
   },
 });
 
+// Sidebar Content Component
+interface SidebarContentProps {
+  user: User | null;
+  groups: Group[];
+  contacts: Contact[];
+  unreadCounts: { [key: string]: number };
+  currentGroup: string;
+  currentDM: string;
+  activeConversationType: 'group' | 'dm' | null;
+  showNotificationPanel: boolean;
+  setShowNotificationPanel: (show: boolean) => void;
+  setShowNotificationPopup: (show: boolean) => void;
+  getTotalNotificationCount: () => number;
+  logout: () => void;
+  setShowCreateGroup: (show: boolean) => void;
+  handleGroupClick: (groupId: string) => void;
+  setShowAddContact: (show: boolean) => void;
+  createDM: (email: string, id: string) => void;
+
+  isMobile: boolean;
+  setIsMobileMenuOpen: (open: boolean) => void;
+}
+
+const SidebarContent = ({ 
+  user, 
+  groups, 
+  contacts, 
+  unreadCounts,
+  currentGroup,
+  currentDM,
+  activeConversationType,
+  showNotificationPanel,
+  setShowNotificationPanel,
+  setShowNotificationPopup,
+  getTotalNotificationCount,
+  logout,
+  setShowCreateGroup,
+  handleGroupClick,
+  setShowAddContact,
+  createDM,
+  isMobile,
+  setIsMobileMenuOpen
+}: SidebarContentProps) => (
+  <>
+    {/* User Header */}
+    <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+      {/* Top Row - Buttons */}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        mb: 2
+      }}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <IconButton
+            onClick={() => {
+              setShowNotificationPanel(!showNotificationPanel);
+              setShowNotificationPopup(false);
+            }}
+            size="small"
+            sx={{ 
+              bgcolor: 'action.hover',
+              '&:hover': { bgcolor: 'action.selected' }
+            }}
+          >
+            <Badge 
+              badgeContent={getTotalNotificationCount()}
+              color="error"
+            >
+              <Bell size={18} />
+            </Badge>
+          </IconButton>
+
+          <IconButton 
+            onClick={logout} 
+            size="small"
+            sx={{ 
+              bgcolor: 'action.hover',
+              '&:hover': { bgcolor: 'action.selected' }
+            }}
+          >
+            <LogoutIcon fontSize="small" />
+          </IconButton>
+        </Box>
+
+        {isMobile && (
+          <IconButton 
+            onClick={() => setIsMobileMenuOpen(false)}
+            size="small"
+          >
+            <CloseIcon />
+          </IconButton>
+        )}
+      </Box>
+
+      {/* User Info Row */}
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: 2,
+        flexWrap: { xs: 'wrap', sm: 'nowrap' }
+      }}>
+        <Avatar sx={{ bgcolor: 'primary.main', width: 48, height: 48 }}>
+          {user?.email?.[0]?.toUpperCase()}
+        </Avatar>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography 
+            variant="subtitle1" 
+            sx={{ 
+              fontWeight: 600,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {user?.email}
+          </Typography>
+          <Typography variant="caption" color="success.main" sx={{ fontWeight: 500 }}>
+            ● Online
+          </Typography>
+        </Box>
+      </Box>
+    </Box>
+
+    {/* Groups Section */}
+    <Box sx={{ flex: 1, overflow: 'auto' }}>
+      <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <GroupIcon />
+            Groups
+          </Typography>
+          <IconButton
+            onClick={() => setShowCreateGroup(true)}
+            size="small"
+            sx={{ color: 'primary.main' }}
+          >
+            <AddIcon />
+          </IconButton>
+        </Box>
+        
+        <List sx={{ p: 0 }}>
+          {groups.map((group: Group) => (
+            <motion.div
+              key={group.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <ListItemButton
+                onClick={() => {
+                  handleGroupClick(group.id);
+                  if (isMobile) setIsMobileMenuOpen(false);
+                }}
+                sx={{
+                  borderRadius: 1,
+                  mb: 0.5,
+                  bgcolor: currentGroup === group.id && activeConversationType === 'group' 
+                    ? 'primary.light' 
+                    : 'transparent',
+                  '&:hover': {
+                    bgcolor: 'action.hover'
+                  }
+                }}
+              >
+                <ListItemAvatar>
+                  <Avatar sx={{ bgcolor: 'secondary.main' }}>
+                    <GroupIcon />
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {group.name}
+                      </Typography>
+                      {unreadCounts[group.id] > 0 && (
+                        <Badge badgeContent={unreadCounts[group.id]} color="error" />
+                      )}
+                    </Box>
+                  }
+                  secondary={
+                    <Typography variant="caption" color="text.secondary">
+                      {group.member_count} members
+                    </Typography>
+                  }
+                />
+              </ListItemButton>
+            </motion.div>
+          ))}
+        </List>
+      </Box>
+
+      {/* Contacts Section */}
+      <Box sx={{ p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Users size={24} />
+            Contacts
+          </Typography>
+          <IconButton
+            onClick={() => setShowAddContact(true)}
+            size="small"
+            sx={{ color: 'primary.main' }}
+          >
+            <PersonAddIcon />
+          </IconButton>
+        </Box>
+        
+        <List sx={{ p: 0 }}>
+          {contacts.filter((c: Contact) => c.status === 'accepted').map((contact: Contact) => (
+            <motion.div
+              key={contact.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <ListItemButton
+                onClick={() => {
+                  createDM(contact.email, contact.id);
+                  if (isMobile) setIsMobileMenuOpen(false);
+                }}
+                sx={{
+                  borderRadius: 1,
+                  mb: 0.5,
+                  bgcolor: currentDM === contact.id && activeConversationType === 'dm' 
+                    ? 'primary.light' 
+                    : 'transparent',
+                  '&:hover': {
+                    bgcolor: 'action.hover'
+                  }
+                }}
+              >
+                <ListItemAvatar>
+                  <Avatar sx={{ bgcolor: 'primary.main' }}>
+                    {contact.email[0]?.toUpperCase()}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box>
+                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                          {contact.email}
+                        </Typography>
+                        <Typography variant="caption" color="success.main" sx={{ fontSize: '0.75rem', fontWeight: 500 }}>
+                          ● Online
+                        </Typography>
+                      </Box>
+                      {unreadCounts[contact.id] > 0 && (
+                        <Badge badgeContent={unreadCounts[contact.id]} color="error" />
+                      )}
+                    </Box>
+                  }
+                />
+              </ListItemButton>
+            </motion.div>
+          ))}
+          
+          {contacts.filter((c: Contact) => c.status === 'accepted').length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+              No contacts yet
+            </Typography>
+          )}
+        </List>
+      </Box>
+    </Box>
+  </>
+);
+
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [email, setEmail] = useState('');
@@ -241,10 +518,12 @@ export default function Home() {
   const [unreadCounts, setUnreadCounts] = useState<{[key: string]: number}>({});
   const [userEmails, setUserEmails] = useState<{[key: string]: string}>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-
-  const USER_SERVICE_URL = process.env.NEXT_PUBLIC_USER_SERVICE_URL || 'https://chat.gadhittana.com/api/v1/user';
-  const CHAT_SERVICE_URL = process.env.NEXT_PUBLIC_CHAT_SERVICE_URL || 'https://chat.gadhittana.com/api/v1/chat';
+  const hasInitializedUnreadCounts = useRef(false);
+  const isFetchingUnreadCounts = useRef(false);
+  const currentConversationRef = useRef<string>('');
+  const isFetchingMessages = useRef(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const scrollToBottom = (instant = false) => {
     messagesEndRef.current?.scrollIntoView({ 
@@ -277,6 +556,20 @@ export default function Home() {
     }
   }, []);
 
+  // Handle mobile detection and window resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth >= 768) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   // Initialize Pusher when user logs in
   useEffect(() => {
     if (isLoggedIn && user) {
@@ -294,12 +587,9 @@ export default function Home() {
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (messages.length > 0) {
-      scrollToBottom(isLoadingMessages);
-      if (isLoadingMessages) {
-        setIsLoadingMessages(false);
-      }
+      scrollToBottom(true);
     }
-  }, [messages, isLoadingMessages]);
+  }, [messages]);
 
   const handleAuth = async (isLogin: boolean) => {
     try {
@@ -347,51 +637,13 @@ export default function Home() {
     } catch (error) {
       console.error('Error fetching groups:', error);
     }
-  }, [token, USER_SERVICE_URL]);
+  }, [token]);
 
-  const fetchGroupMessages = useCallback(async (groupId: string) => {
-    try {
-      setIsLoadingMessages(true);
-      const response = await fetch(`${CHAT_SERVICE_URL}/messages/${groupId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setMessages(data.messages || []);
-      }
-    } catch (error) {
-      console.error('Error fetching group messages:', error);
-      setIsLoadingMessages(false);
-    }
-  }, [token, CHAT_SERVICE_URL]);
 
-  const fetchDMMessages = useCallback(async (receiverId: string) => {
-    try {
-      setIsLoadingMessages(true);
-      const response = await fetch(`${CHAT_SERVICE_URL}/messages/dm?receiver_id=${receiverId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setMessages(data.messages || []);
-      }
-    } catch (error) {
-      console.error('Error fetching DM messages:', error);
-      setIsLoadingMessages(false);
-    }
-  }, [token, CHAT_SERVICE_URL]);
 
-  const fetchMessages = useCallback(async () => {
-    if (currentDM) {
-      fetchDMMessages(currentDM);
-    } else if (currentGroup) {
-      fetchGroupMessages(currentGroup);
-    }
-  }, [currentDM, currentGroup, fetchDMMessages, fetchGroupMessages]);
+
+
+
 
   const fetchContacts = useCallback(async () => {
     try {
@@ -420,7 +672,7 @@ export default function Home() {
     } catch (error) {
       console.error('Error fetching contacts:', error);
     }
-  }, [token, USER_SERVICE_URL]);
+  }, [token]);
 
   const fetchPendingNotifications = useCallback(async () => {
     try {
@@ -460,14 +712,17 @@ export default function Home() {
     } catch (error) {
       console.error('Error fetching notifications:', error);
     }
-  }, [token, USER_SERVICE_URL]);
+  }, [token]);
 
-  const fetchUnreadCounts = useCallback(async () => {
+  const fetchUnreadCounts = useCallback(async (currentGroups: Group[], currentContacts: Contact[]) => {
+    if (!token || (!currentGroups.length && !currentContacts.length) || isFetchingUnreadCounts.current) return;
+    
+    isFetchingUnreadCounts.current = true;
     try {
       const newUnreadCounts: { [key: string]: number } = {};
 
       // Fetch unread counts for all groups
-      for (const group of groups) {
+      for (const group of currentGroups) {
         try {
           const response = await fetch(`${CHAT_SERVICE_URL}/unread-count/${group.id}`, {
             headers: {
@@ -485,7 +740,7 @@ export default function Home() {
       }
 
       // Fetch unread counts for all contacts (DMs)
-      for (const contact of contacts.filter(c => c.status === 'accepted')) {
+      for (const contact of currentContacts.filter(c => c.status === 'accepted')) {
         try {
           const response = await fetch(`${CHAT_SERVICE_URL}/dm-unread-count/${contact.id}`, {
             headers: {
@@ -505,8 +760,10 @@ export default function Home() {
       setUnreadCounts(newUnreadCounts);
     } catch (error) {
       console.error('Error fetching unread counts:', error);
+    } finally {
+      isFetchingUnreadCounts.current = false;
     }
-  }, [token, groups, contacts, CHAT_SERVICE_URL]);
+  }, [token]);
 
   // Fetch data when user logs in
   useEffect(() => {
@@ -519,28 +776,103 @@ export default function Home() {
 
   // Fetch unread counts after groups and contacts are loaded  
   useEffect(() => {
-    if (isLoggedIn && token) {
-      // Small delay to ensure groups and contacts are fetched first
-      const timeoutId = setTimeout(() => {
-        fetchUnreadCounts();
-      }, 500);
-      
-      return () => clearTimeout(timeoutId);
+    if (isLoggedIn && token && (groups.length > 0 || contacts.length > 0) && !hasInitializedUnreadCounts.current) {
+      hasInitializedUnreadCounts.current = true;
+      fetchUnreadCounts(groups, contacts);
     }
-  }, [isLoggedIn, token, groups, contacts, fetchUnreadCounts]);
+  }, [isLoggedIn, token, groups.length, contacts.length]);
 
   // Fetch messages when current conversation changes
   useEffect(() => {
-    if (token && (currentGroup || currentDM)) {
-      fetchMessages();
-    }
-  }, [currentGroup, currentDM, token, fetchMessages]);
+    if (!token || isFetchingMessages.current) return;
+    
+    const conversationId = currentGroup || currentDM;
+    if (!conversationId || currentConversationRef.current === conversationId) return;
+    
+    currentConversationRef.current = conversationId;
+    isFetchingMessages.current = true;
+    
+    const fetchMessages = async () => {
+      try {
+        if (currentDM) {
+          // Fetch DM messages directly
+          const response = await fetch(`${CHAT_SERVICE_URL}/messages/dm?receiver_id=${currentDM}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setMessages(data.messages || []);
+            scrollToBottom(true);
+
+            // Update read cursor to mark DM messages as read
+            if (data.messages && data.messages.length > 0) {
+              const lastMessage = data.messages[data.messages.length - 1];
+              
+              fetch(`${CHAT_SERVICE_URL}/read-cursor`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  receiver_id: currentDM,
+                  last_read_message_id: lastMessage.id
+                }),
+              }).catch(error => {
+                console.error('Error updating DM read cursor:', error);
+              });
+            }
+          }
+        } else if (currentGroup) {
+          // Fetch group messages directly
+          const response = await fetch(`${CHAT_SERVICE_URL}/messages/${currentGroup}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setMessages(data.messages || []);
+            scrollToBottom(true);
+
+            // Update read cursor to mark messages as read
+            if (data.messages && data.messages.length > 0) {
+              const lastMessage = data.messages[data.messages.length - 1];
+              
+              fetch(`${CHAT_SERVICE_URL}/read-cursor`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  group_id: currentGroup,
+                  last_read_message_id: lastMessage.id
+                }),
+              }).catch(error => {
+                console.error('Error updating read cursor:', error);
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+      } finally {
+        isFetchingMessages.current = false;
+      }
+    };
+    
+    fetchMessages();
+  }, [currentGroup, currentDM, token]);
 
   const createDM = async (contactEmail: string, contactId: string) => {
     setCurrentDM(contactId);
     setCurrentGroup('');
     setActiveConversationType('dm');
-    setMessages([]);
     
     // Reset unread count for this contact
     setUnreadCounts(prev => ({
@@ -553,49 +885,12 @@ export default function Home() {
       setUserEmails(prev => ({ ...prev, [contactId]: contactEmail }));
     }
 
-    // Fetch messages for this DM conversation
-    try {
-      const response = await fetch(`${CHAT_SERVICE_URL}/messages/dm?receiver_id=${contactId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setMessages(data.messages || []);
-        setTimeout(() => scrollToBottom(true), 100);
-
-        // Update read cursor to mark DM messages as read
-        if (data.messages && data.messages.length > 0) {
-          // Get the last message overall (similar to how groups work)
-          const lastMessage = data.messages[data.messages.length - 1];
-          
-          try {
-            await fetch(`${CHAT_SERVICE_URL}/read-cursor`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                receiver_id: contactId,
-                last_read_message_id: lastMessage.id
-              }),
-            });
-          } catch (error) {
-            console.error('Error updating DM read cursor:', error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching DM messages:', error);
-    }
+    // Don't fetch messages here - let the useEffect handle it to avoid duplicates
   };
 
-  // Set up Pusher channels for real-time updates
+  // Set up basic Pusher channels (only re-run when groups/contacts change, not when switching chats)
   useEffect(() => {
-    if (pusher && user) {
+    if (pusher && user && (groups.length > 0 || contacts.length > 0)) {
       // Cleanup existing channels first
       Object.values(channels).forEach((channel) => {
         if (channel && channel.unbind_all) {
@@ -615,8 +910,6 @@ export default function Home() {
           groupChannel.bind('new-message', (data: PusherChannelData) => {
             console.log('Received group message:', data);
             
-            // Only add message if it's not from current user OR if we're not in this group's chat
-            const isCurrentGroupChat = currentGroup === data.message.group_id && activeConversationType === 'group';
             const isFromCurrentUser = data.message.sender_id === user.id;
             
             if (!isFromCurrentUser) {
@@ -632,37 +925,8 @@ export default function Home() {
               setNotifications(prev => [notification, ...prev]);
               setShowNotificationPopup(true);
               setTimeout(() => setShowNotificationPopup(false), 3000);
-            }
-
-            // Update messages if this is the current group AND message is not from current user
-            if (isCurrentGroupChat && !isFromCurrentUser) {
-              setMessages(prev => {
-                const messageExists = prev.some(msg => msg.id === data.message.id);
-                if (!messageExists) {
-                  return [...prev, data.message];
-                }
-                return prev;
-              });
-
-              // Update read cursor for the new message since user is actively viewing this chat
-              try {
-                fetch(`${CHAT_SERVICE_URL}/read-cursor`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                  },
-                  body: JSON.stringify({
-                    group_id: data.message.group_id,
-                    last_read_message_id: data.message.id
-                  }),
-                });
-              } catch (error) {
-                console.error('Error updating read cursor for new group message:', error);
-              }
-            } 
-            // Update unread count only if not in current group chat AND not from current user
-            else if (!isCurrentGroupChat && !isFromCurrentUser) {
+              
+              // Update unread count
               setUnreadCounts(prev => {
                 const currentCount = prev[data.message.group_id] || 0;
                 return {
@@ -689,10 +953,6 @@ export default function Home() {
           dmChannel.bind('new-message', (data: PusherChannelData) => {
             console.log('Received DM message:', data);
             
-            const isCurrentDMChat = currentDM && activeConversationType === 'dm' && (
-              (data.message.sender_id === currentDM && data.message.receiver_id === user.id) ||
-              (data.message.sender_id === user.id && data.message.receiver_id === currentDM)
-            );
             const isFromCurrentUser = data.message.sender_id === user.id;
             
             if (!isFromCurrentUser) {
@@ -707,37 +967,8 @@ export default function Home() {
               setNotifications(prev => [notification, ...prev]);
               setShowNotificationPopup(true);
               setTimeout(() => setShowNotificationPopup(false), 3000);
-            }
-
-            // Update messages if this is the current DM AND message is not from current user
-            if (isCurrentDMChat && !isFromCurrentUser) {
-              setMessages(prev => {
-                const messageExists = prev.some(msg => msg.id === data.message.id);
-                if (!messageExists) {
-                  return [...prev, data.message];
-                }
-                return prev;
-              });
-
-              // Update read cursor for the new DM message since user is actively viewing this chat
-              try {
-                fetch(`${CHAT_SERVICE_URL}/read-cursor`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                  },
-                  body: JSON.stringify({
-                    receiver_id: currentDM,
-                    last_read_message_id: data.message.id
-                  }),
-                });
-              } catch (error) {
-                console.error('Error updating read cursor for new DM message:', error);
-              }
-            } 
-            // Update unread count only if not in current DM chat AND not from current user
-            else if (!isCurrentDMChat && !isFromCurrentUser) {
+              
+              // Update unread count
               setUnreadCounts(prev => {
                 const currentCount = prev[data.message.sender_id] || 0;
                 return {
@@ -774,7 +1005,100 @@ export default function Home() {
         });
       };
     }
-  }, [pusher, user, groups, contacts, currentGroup, currentDM, activeConversationType, fetchPendingNotifications, CHAT_SERVICE_URL, token]);
+  }, [pusher, user, groups, contacts, fetchPendingNotifications]);
+
+  // Memoize the message handlers to prevent useEffect from running on every render
+  const handleGroupMessage = useCallback((data: PusherChannelData) => {
+    const isCurrentGroupChat = currentGroup === data.message.group_id && activeConversationType === 'group';
+    const isFromCurrentUser = data.message.sender_id === user?.id;
+    
+    if (isCurrentGroupChat && !isFromCurrentUser) {
+      setMessages(prev => {
+        const messageExists = prev.some(msg => msg.id === data.message.id);
+        if (!messageExists) {
+          return [...prev, data.message];
+        }
+        return prev;
+      });
+
+      // Update read cursor for the new message since user is actively viewing this chat
+      fetch(`${CHAT_SERVICE_URL}/read-cursor`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          group_id: data.message.group_id,
+          last_read_message_id: data.message.id
+        }),
+      }).catch(error => {
+        console.error('Error updating read cursor for new group message:', error);
+      });
+    }
+  }, [currentGroup, activeConversationType, user?.id, token]);
+
+  const handleDMMessage = useCallback((data: PusherChannelData) => {
+    const isCurrentDMChat = currentDM && activeConversationType === 'dm' && (
+      (data.message.sender_id === currentDM && data.message.receiver_id === user?.id) ||
+      (data.message.sender_id === user?.id && data.message.receiver_id === currentDM)
+    );
+    const isFromCurrentUser = data.message.sender_id === user?.id;
+    
+    if (isCurrentDMChat && !isFromCurrentUser) {
+      setMessages(prev => {
+        const messageExists = prev.some(msg => msg.id === data.message.id);
+        if (!messageExists) {
+          return [...prev, data.message];
+        }
+        return prev;
+      });
+
+      // Update read cursor for the new DM message since user is actively viewing this chat
+      fetch(`${CHAT_SERVICE_URL}/read-cursor`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          receiver_id: currentDM,
+          last_read_message_id: data.message.id
+        }),
+      }).catch(error => {
+        console.error('Error updating read cursor for new DM message:', error);
+      });
+    }
+  }, [currentDM, activeConversationType, user?.id, token]);
+
+  // Handle real-time message updates for current conversation
+  useEffect(() => {
+    if (!pusher || !user) return;
+
+    // Bind to current group if active
+    if (currentGroup && activeConversationType === 'group') {
+      const groupChannel = pusher.subscribe(currentGroup) as PusherChannel;
+      groupChannel.bind('new-message', handleGroupMessage);
+      
+      return () => {
+        groupChannel.unbind('new-message', handleGroupMessage);
+      };
+    }
+
+    // Bind to current DM if active
+    if (currentDM && activeConversationType === 'dm') {
+      const dmChannelId = user.id < currentDM 
+        ? `dm_${user.id}_${currentDM}` 
+        : `dm_${currentDM}_${user.id}`;
+      
+      const dmChannel = pusher.subscribe(dmChannelId) as PusherChannel;
+      dmChannel.bind('new-message', handleDMMessage);
+      
+      return () => {
+        dmChannel.unbind('new-message', handleDMMessage);
+      };
+    }
+  }, [pusher, user, currentGroup, currentDM, activeConversationType, handleGroupMessage, handleDMMessage]);
 
 
 
@@ -852,7 +1176,7 @@ export default function Home() {
         await fetchContacts();
         await fetchPendingNotifications();
         // Refresh unread counts for new contact
-        setTimeout(() => fetchUnreadCounts(), 100);
+        setTimeout(() => fetchUnreadCounts(groups, contacts), 100);
       } else {
         const error = await response.json();
         alert(error.error || 'Failed to accept contact');
@@ -901,7 +1225,7 @@ export default function Home() {
         await fetchGroups();
         await fetchPendingNotifications();
         // Refresh unread counts for new group
-        setTimeout(() => fetchUnreadCounts(), 100);
+        setTimeout(() => fetchUnreadCounts(groups, contacts), 100);
       } else {
         const error = await response.json();
         alert(error.error || 'Failed to accept invite');
@@ -959,6 +1283,12 @@ export default function Home() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     
+    // Reset the refs to allow fresh initialization on next login
+    hasInitializedUnreadCounts.current = false;
+    isFetchingUnreadCounts.current = false;
+    currentConversationRef.current = '';
+    isFetchingMessages.current = false;
+    
     if (pusher) {
       pusher.disconnect();
       setPusher(null);
@@ -984,7 +1314,7 @@ export default function Home() {
         setShowCreateGroup(false);
         await fetchGroups();
         // Refresh unread counts for new group
-        setTimeout(() => fetchUnreadCounts(), 100);
+        setTimeout(() => fetchUnreadCounts(groups, contacts), 100);
       } else {
         const error = await response.json();
         alert(error.error || 'Failed to create group');
@@ -1031,7 +1361,6 @@ export default function Home() {
     setCurrentGroup(groupId);
     setCurrentDM('');
     setActiveConversationType('group');
-    setMessages([]);
     
     // Reset unread count for this group
     setUnreadCounts(prev => ({
@@ -1039,42 +1368,7 @@ export default function Home() {
       [groupId]: 0
     }));
 
-    // Fetch messages for this group
-    try {
-      const response = await fetch(`${CHAT_SERVICE_URL}/messages/${groupId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setMessages(data.messages || []);
-        setTimeout(() => scrollToBottom(true), 100);
-
-        // Update read cursor to mark messages as read
-        if (data.messages && data.messages.length > 0) {
-          const lastMessage = data.messages[data.messages.length - 1];
-          try {
-            await fetch(`${CHAT_SERVICE_URL}/read-cursor`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                group_id: groupId,
-                last_read_message_id: lastMessage.id
-              }),
-            });
-          } catch (error) {
-            console.error('Error updating read cursor:', error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching group messages:', error);
-    }
+    // Don't fetch messages here - let the useEffect handle it to avoid duplicates
   };
 
   if (!isLoggedIn) {
@@ -1187,10 +1481,10 @@ export default function Home() {
               exit={{ opacity: 0, x: 300 }}
               style={{
                 position: 'fixed',
-                top: 16,
+                top: isMobile ? 80 : 16,
                 right: 16,
                 zIndex: 1400,
-                maxWidth: 320
+                maxWidth: isMobile ? 280 : 320
               }}
             >
               <Card sx={{ bgcolor: 'primary.main', color: 'white' }}>
@@ -1207,27 +1501,64 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* Left Sidebar */}
-        <Paper 
-          elevation={0}
-          sx={{ 
-            width: 320, 
-            borderRight: 1, 
-            borderColor: 'divider',
-            display: 'flex', 
-            flexDirection: 'column',
-            bgcolor: 'background.paper'
-          }}
-        >
-          {/* User Header */}
-          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-            {/* Top Row - Buttons */}
+        {/* Mobile Header */}
+        {isMobile && (
+          <motion.div
+            initial={{ y: -60 }}
+            animate={{ y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 1200,
+              background: 'rgba(255, 255, 255, 0.95)',
+              backdropFilter: 'blur(10px)',
+              borderBottom: '1px solid #e2e8f0'
+            }}
+          >
             <Box sx={{ 
               display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              mb: 2
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              p: 2,
+              height: 64
             }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                {(currentGroup || currentDM) ? (
+                  <IconButton 
+                    onClick={() => {
+                      setCurrentGroup('');
+                      setCurrentDM('');
+                      setActiveConversationType(null);
+                      setMessages([]);
+                      currentConversationRef.current = '';
+                      isFetchingMessages.current = false;
+                    }}
+                    size="small"
+                  >
+                    <ArrowBackIcon />
+                  </IconButton>
+                ) : (
+                  <IconButton 
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    size="small"
+                  >
+                    <MenuIcon />
+                  </IconButton>
+                )}
+                
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  {currentGroup ? 
+                    groups.find(g => g.id === currentGroup)?.name || 'Group Chat' :
+                    currentDM ? 
+                    getUserEmail(currentDM) :
+                    'Chat App'
+                  }
+                </Typography>
+              </Box>
+
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <IconButton
                   onClick={() => {
@@ -1235,10 +1566,6 @@ export default function Home() {
                     setShowNotificationPopup(false);
                   }}
                   size="small"
-                  sx={{ 
-                    bgcolor: 'action.hover',
-                    '&:hover': { bgcolor: 'action.selected' }
-                  }}
                 >
                   <Badge 
                     badgeContent={getTotalNotificationCount()}
@@ -1247,205 +1574,117 @@ export default function Home() {
                     <Bell size={18} />
                   </Badge>
                 </IconButton>
-
-                <IconButton 
-                  onClick={logout} 
-                  size="small"
-                  sx={{ 
-                    bgcolor: 'action.hover',
-                    '&:hover': { bgcolor: 'action.selected' }
-                  }}
-                >
-                  <LogoutIcon fontSize="small" />
-                </IconButton>
               </Box>
             </Box>
+          </motion.div>
+        )}
 
-            {/* User Info Row */}
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 2,
-              flexWrap: { xs: 'wrap', sm: 'nowrap' }
-            }}>
-              <Avatar sx={{ bgcolor: 'primary.main', width: 48, height: 48 }}>
-                {user?.email?.[0]?.toUpperCase()}
-              </Avatar>
-              <Box sx={{ minWidth: 0, flex: 1 }}>
-                <Typography 
-                  variant="subtitle1" 
-                  sx={{ 
-                    fontWeight: 600,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  {user?.email}
-                </Typography>
-                <Typography variant="caption" color="success.main" sx={{ fontWeight: 500 }}>
-                  ● Online
-                </Typography>
-              </Box>
-            </Box>
-          </Box>
-
-
-
-          {/* Groups Section */}
-          <Box sx={{ flex: 1, overflow: 'auto' }}>
-            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="h6" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <GroupIcon />
-                  Groups
-                </Typography>
-                <IconButton
-                  onClick={() => setShowCreateGroup(true)}
-                  size="small"
-                  sx={{ color: 'primary.main' }}
-                >
-                  <AddIcon />
-                </IconButton>
-              </Box>
-              
-              <List sx={{ p: 0 }}>
-                {groups.map((group) => (
-                  <motion.div
-                    key={group.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <ListItemButton
-                      onClick={() => handleGroupClick(group.id)}
-                      sx={{
-                        borderRadius: 1,
-                        mb: 0.5,
-                        bgcolor: currentGroup === group.id && activeConversationType === 'group' 
-                          ? 'primary.light' 
-                          : 'transparent',
-                        '&:hover': {
-                          bgcolor: 'action.hover'
-                        }
-                      }}
-                    >
-                      <ListItemAvatar>
-                        <Avatar sx={{ bgcolor: 'secondary.main' }}>
-                          <GroupIcon />
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                              {group.name}
-                            </Typography>
-                            {unreadCounts[group.id] > 0 && (
-                              <Badge badgeContent={unreadCounts[group.id]} color="error" />
-                            )}
-                          </Box>
-                        }
-                        secondary={
-                          <Typography variant="caption" color="text.secondary">
-                            {group.member_count} members
-                          </Typography>
-                        }
-                      />
-                    </ListItemButton>
-                  </motion.div>
-                ))}
-              </List>
-            </Box>
-
-            {/* Contacts Section */}
-            <Box sx={{ p: 2 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="h6" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Users size={24} />
-                  Contacts
-                </Typography>
-                <IconButton
-                  onClick={() => setShowAddContact(true)}
-                  size="small"
-                  sx={{ color: 'primary.main' }}
-                >
-                  <PersonAddIcon />
-                </IconButton>
-              </Box>
-              
-              <List sx={{ p: 0 }}>
-                {contacts.filter(c => c.status === 'accepted').map((contact) => (
-                  <motion.div
-                    key={contact.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <ListItemButton
-                      onClick={() => createDM(contact.email, contact.id)}
-                      sx={{
-                        borderRadius: 1,
-                        mb: 0.5,
-                        bgcolor: currentDM === contact.id && activeConversationType === 'dm' 
-                          ? 'primary.light' 
-                          : 'transparent',
-                        '&:hover': {
-                          bgcolor: 'action.hover'
-                        }
-                      }}
-                    >
-                      <ListItemAvatar>
-                        <Avatar sx={{ bgcolor: 'primary.main' }}>
-                          {contact.email[0]?.toUpperCase()}
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Box>
-                              <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                                {contact.email}
-                              </Typography>
-                              <Typography variant="caption" color="success.main" sx={{ fontSize: '0.75rem', fontWeight: 500 }}>
-                                ● Online
-                              </Typography>
-                            </Box>
-                            {unreadCounts[contact.id] > 0 && (
-                              <Badge badgeContent={unreadCounts[contact.id]} color="error" />
-                            )}
-                          </Box>
-                        }
-                      />
-                    </ListItemButton>
-                  </motion.div>
-                ))}
-                
-                {contacts.filter(c => c.status === 'accepted').length === 0 && (
-                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                    No contacts yet
-                  </Typography>
-                )}
-              </List>
-            </Box>
-          </Box>
-        </Paper>
-
-        {/* Main Chat Area */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {/* Chat Header */}
-          {(currentGroup || currentDM) && (
+        {/* Left Sidebar - Desktop */}
+        {!isMobile && (
+          <motion.div
+            initial={{ x: -320 }}
+            animate={{ x: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            style={{ width: 320 }}
+          >
             <Paper 
               elevation={0}
               sx={{ 
-                p: 2, 
-                borderBottom: 1, 
+                width: '100%',
+                height: '100vh',
+                borderRight: 1, 
                 borderColor: 'divider',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
+                display: 'flex', 
+                flexDirection: 'column',
+                bgcolor: 'background.paper'
               }}
+                          >
+                <SidebarContent 
+                  user={user}
+                  groups={groups}
+                  contacts={contacts}
+                  unreadCounts={unreadCounts}
+                  currentGroup={currentGroup}
+                  currentDM={currentDM}
+                  activeConversationType={activeConversationType}
+                  showNotificationPanel={showNotificationPanel}
+                  setShowNotificationPanel={setShowNotificationPanel}
+                  setShowNotificationPopup={setShowNotificationPopup}
+                  getTotalNotificationCount={getTotalNotificationCount}
+                  logout={logout}
+                  setShowCreateGroup={setShowCreateGroup}
+                  handleGroupClick={handleGroupClick}
+                  setShowAddContact={setShowAddContact}
+                  createDM={createDM}
+                  isMobile={false}
+                  setIsMobileMenuOpen={setIsMobileMenuOpen}
+                />
+              </Paper>
+            </motion.div>
+          )}
+
+          {/* Mobile Sidebar Drawer */}
+          <Drawer
+            anchor="left"
+            open={isMobileMenuOpen}
+            onClose={() => setIsMobileMenuOpen(false)}
+            sx={{
+              '& .MuiDrawer-paper': {
+                width: 320,
+                bgcolor: 'background.paper'
+              }
+            }}
+          >
+            <SidebarContent 
+              user={user}
+              groups={groups}
+              contacts={contacts}
+              unreadCounts={unreadCounts}
+              currentGroup={currentGroup}
+              currentDM={currentDM}
+              activeConversationType={activeConversationType}
+              showNotificationPanel={showNotificationPanel}
+              setShowNotificationPanel={setShowNotificationPanel}
+              setShowNotificationPopup={setShowNotificationPopup}
+              getTotalNotificationCount={getTotalNotificationCount}
+              logout={logout}
+              setShowCreateGroup={setShowCreateGroup}
+              handleGroupClick={handleGroupClick}
+              setShowAddContact={setShowAddContact}
+              createDM={createDM}
+              isMobile={true}
+              setIsMobileMenuOpen={setIsMobileMenuOpen}
+            />
+          </Drawer>
+
+        {/* Main Chat Area */}
+        <Box sx={{ 
+          flex: 1, 
+          display: 'flex', 
+          flexDirection: 'column',
+          paddingTop: isMobile ? '64px' : 0,
+          width: isMobile ? '100vw' : 'auto',
+          height: '100vh',
+          overflow: 'hidden'
+        }}>
+          {/* Chat Header - Desktop Only */}
+          {(currentGroup || currentDM) && !isMobile && (
+            <motion.div
+              initial={{ y: -40 }}
+              animate={{ y: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
             >
+              <Paper 
+                elevation={0}
+                sx={{ 
+                  p: 2, 
+                  borderBottom: 1, 
+                  borderColor: 'divider',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}
+              >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Avatar sx={{ bgcolor: activeConversationType === 'group' ? 'secondary.main' : 'primary.main' }}>
                   {activeConversationType === 'group' ? (
@@ -1478,7 +1717,8 @@ export default function Home() {
                   <PersonAddIcon />
                 </IconButton>
               )}
-            </Paper>
+              </Paper>
+            </motion.div>
           )}
 
           {/* Messages Area */}
@@ -1486,7 +1726,7 @@ export default function Home() {
             sx={{ 
               flex: 1, 
               overflow: 'auto', 
-              p: 2,
+              p: isMobile ? 1 : 2,
               display: 'flex',
               flexDirection: 'column',
               gap: 1,
@@ -1494,83 +1734,123 @@ export default function Home() {
             }}
           >
             {!currentGroup && !currentDM && (
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                height: '100%',
-                flexDirection: 'column',
-                gap: 2
-              }}>
-                <MessageCircle size={64} color="#9ca3af" />
-                <Typography variant="h5" color="text.secondary">
-                  Select a conversation to start chatting
-                </Typography>
-              </Box>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, type: "spring", stiffness: 200 }}
+                style={{ height: '100%' }}
+              >
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  height: '100%',
+                  flexDirection: 'column',
+                  gap: 2,
+                  textAlign: 'center',
+                  px: 2
+                }}>
+                  <motion.div
+                    animate={{ 
+                      rotate: 360,
+                      scale: [1, 1.1, 1]
+                    }}
+                    transition={{ 
+                      rotate: { duration: 20, repeat: Infinity, ease: "linear" },
+                      scale: { duration: 2, repeat: Infinity, ease: "easeInOut" }
+                    }}
+                  >
+                    <MessageCircle size={isMobile ? 48 : 64} color="#9ca3af" />
+                  </motion.div>
+                  <Typography 
+                    variant={isMobile ? "h6" : "h5"} 
+                    color="text.secondary"
+                    sx={{ fontWeight: 500 }}
+                  >
+                    {isMobile ? "Select a chat to start" : "Select a conversation to start chatting"}
+                  </Typography>
+                  {!isMobile && (
+                    <Typography variant="body2" color="text.secondary" sx={{ opacity: 0.8 }}>
+                      Choose from your groups or contacts on the left
+                    </Typography>
+                  )}
+                </Box>
+              </motion.div>
             )}
 
-            {messages.map((message) => (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
+
+
+                                  {messages.map((message) => (
+              <div key={message.id}>
                 <Box
                   sx={{
                     display: 'flex',
                     justifyContent: message.sender_id === user?.id ? 'flex-end' : 'flex-start',
                     mb: 1,
-                    px: 1
+                    px: isMobile ? 0.5 : 1
                   }}
                 >
-                  <Box
-                    sx={{
-                      maxWidth: '70%',
-                      p: 2,
-                      bgcolor: message.sender_id === user?.id ? '#007AFF' : '#E5E5EA',
-                      color: message.sender_id === user?.id ? 'white' : '#000000',
-                      borderRadius: 1,
-                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
-                    }}
+                  <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    transition={{ duration: 0.2 }}
                   >
-                    {message.sender_id !== user?.id && activeConversationType === 'group' && (
+                    <Box
+                      sx={{
+                        maxWidth: isMobile ? '75%' : '60%',
+                        minWidth: 'fit-content',
+                        p: 1.5,
+                        bgcolor: message.sender_id === user?.id ? '#007AFF' : '#E5E5EA',
+                        color: message.sender_id === user?.id ? 'white' : '#000000',
+                        borderRadius: 1,
+                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+                        display: 'inline-block'
+                      }}
+                    >
+                                          {message.sender_id !== user?.id && activeConversationType === 'group' && (
+                        <Typography 
+                          variant="caption" 
+                          sx={{ 
+                            fontWeight: 500, 
+                            opacity: 0.7,
+                            display: 'block',
+                            mb: 0.5,
+                            fontSize: '0.75rem',
+                            color: 'rgba(0,0,0,0.6)'
+                          }}
+                        >
+                          {getUserEmail(message.sender_id)}
+                        </Typography>
+                      )}
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          wordBreak: 'break-word',
+                          fontSize: '15px',
+                          lineHeight: 1.4,
+                          mb: 0.5
+                        }}
+                      >
+                        {message.message}
+                      </Typography>
                       <Typography 
                         variant="caption" 
                         sx={{ 
-                          fontWeight: 500, 
-                          opacity: 0.7,
-                          display: 'block',
-                          mb: 0.5,
-                          fontSize: '0.7rem',
-                          color: 'rgba(0,0,0,0.6)'
+                          opacity: message.sender_id === user?.id ? 0.8 : 0.6,
+                          display: 'block', 
+                          textAlign: 'right',
+                          fontSize: '11px',
+                          color: message.sender_id === user?.id ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.5)'
                         }}
                       >
-                        {getUserEmail(message.sender_id)}
+                        {new Date(message.timestamp).toLocaleTimeString([], { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
                       </Typography>
-                    )}
-                    <Typography variant="body1" sx={{ wordBreak: 'break-word' }}>
-                      {message.message}
-                    </Typography>
-                    <Typography 
-                      variant="caption" 
-                      sx={{ 
-                        opacity: message.sender_id === user?.id ? 0.8 : 0.6,
-                        display: 'block', 
-                        textAlign: 'right',
-                        mt: 0.5,
-                        fontSize: '0.65rem',
-                        color: message.sender_id === user?.id ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.5)'
-                      }}
-                    >
-                      {new Date(message.timestamp).toLocaleTimeString([], { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}
-                    </Typography>
-                  </Box>
+                    </Box>
+                  </motion.div>
                 </Box>
-              </motion.div>
+              </div>
             ))}
             <div ref={messagesEndRef} />
           </Box>
@@ -1579,44 +1859,81 @@ export default function Home() {
           {(currentGroup || currentDM) && (
             <Box 
               sx={{ 
-                p: 2, 
+                p: 1.5,
                 borderTop: 1, 
                 borderColor: 'divider',
                 display: 'flex',
-                alignItems: 'center',
-                gap: 2
+                alignItems: 'flex-end',
+                gap: 1,
+                bgcolor: 'background.paper',
+                boxShadow: '0 -2px 8px rgba(0, 0, 0, 0.05)',
+                position: 'sticky',
+                bottom: 0,
+                zIndex: 10
               }}
             >
-              <TextField
-                fullWidth
-                placeholder="Type a message..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-                variant="outlined"
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 1,
-                    '& fieldset': {
-                      borderColor: 'divider'
+                <TextField
+                  fullWidth
+                  placeholder="Type a message..."
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
                     }
-                  }
-                }}
-              />
-              <Button
-                variant="contained"
-                onClick={sendMessage}
-                disabled={!newMessage.trim()}
-                endIcon={<SendIcon />}
-              >
-                Send
-              </Button>
-            </Box>
+                  }}
+                  variant="outlined"
+                  multiline
+                  maxRows={3}
+                  minRows={1}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 2,
+                      backgroundColor: 'white',
+                      minHeight: '40px',
+                      '& fieldset': {
+                        borderColor: '#e0e0e0'
+                      },
+                      '&:hover fieldset': {
+                        borderColor: 'primary.main'
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: 'primary.main',
+                        borderWidth: 2
+                      }
+                    },
+                    '& .MuiInputBase-input': {
+                      padding: '8px 12px',
+                      fontSize: '14px',
+                      lineHeight: 1.4
+                    }
+                  }}
+                />
+                                <Button
+                  variant="contained"
+                  onClick={sendMessage}
+                  disabled={!newMessage.trim()}
+                  endIcon={!isMobile && <SendIcon />}
+                  sx={{
+                    borderRadius: 2,
+                    minWidth: isMobile ? '40px' : 'auto',
+                    height: '40px',
+                    px: isMobile ? 1.5 : 2.5,
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    boxShadow: 1,
+                    '&:hover': {
+                      boxShadow: 2
+                    },
+                    '&:disabled': {
+                      opacity: 0.5
+                    }
+                  }}
+                >
+                  {isMobile ? <SendIcon fontSize="small" /> : 'Send'}
+                </Button>
+              </Box>
           )}
         </Box>
 
@@ -1627,7 +1944,7 @@ export default function Home() {
           onClose={() => setShowNotificationPanel(false)}
           sx={{
             '& .MuiDrawer-paper': {
-              width: 400,
+              width: isMobile ? '100vw' : 400,
               bgcolor: 'background.default'
             }
           }}
